@@ -416,11 +416,13 @@ class ModuleConfigGUI:
     image_binarization: tk.BooleanVar = field(init=False)
     optical_flow: tk.BooleanVar = field(init=False)
     intensity_distribution: tk.BooleanVar = field(init=False)
+    nematics: tk.BooleanVar = field(init=False)
 
     def __post_init__(self):
         self.image_binarization = tk.BooleanVar(value=self._core_config.image_binarization)
         self.optical_flow = tk.BooleanVar(value=self._core_config.optical_flow)
         self.intensity_distribution = tk.BooleanVar(value=self._core_config.intensity_distribution)
+        self.nematics = tk.BooleanVar(value=self._core_config.nematics)
 
     @property
     def config(self) -> ModuleConfig:
@@ -429,6 +431,7 @@ class ModuleConfigGUI:
             image_binarization=self.image_binarization.get(),
             optical_flow=self.optical_flow.get(),
             intensity_distribution=self.intensity_distribution.get(),
+            nematics=self.nematics.get(),
         )
 
     def update_gui(self, new_config: ModuleConfig):
@@ -437,6 +440,7 @@ class ModuleConfigGUI:
         self.image_binarization.set(new_config.image_binarization)
         self.optical_flow.set(new_config.optical_flow)
         self.intensity_distribution.set(new_config.intensity_distribution)
+        self.nematics.set(new_config.nematics)
 
 @dataclass
 class VisualizationConfigGUI:
@@ -681,6 +685,60 @@ class VisualizationConfigGUI:
         self._indices.set(new_config._indices)
 
 @dataclass
+class NematicsConfigGUI:
+    """GUI wrapper for NematicsConfig"""
+    _core_config: NematicsConfig = field(default_factory=NematicsConfig)
+
+    image_type: tk.StringVar = field(init=False)
+    pixel_size: tk.DoubleVar = field(init=False)
+    k11: tk.DoubleVar = field(init=False)
+    k33: tk.DoubleVar = field(init=False)
+    s0: tk.DoubleVar = field(init=False)
+    smoothing_sigma: tk.DoubleVar = field(init=False)
+    window_size: tk.IntVar = field(init=False)
+    overlap: tk.DoubleVar = field(init=False)
+    bg_threshold: tk.IntVar = field(init=False)
+
+    def __post_init__(self):
+        self.image_type = tk.StringVar(value=self._core_config.image_type)
+        self.pixel_size = tk.DoubleVar(value=self._core_config.pixel_size)
+        self.k11 = tk.DoubleVar(value=self._core_config.k11)
+        self.k33 = tk.DoubleVar(value=self._core_config.k33)
+        self.s0 = tk.DoubleVar(value=self._core_config.s0)
+        self.smoothing_sigma = tk.DoubleVar(value=self._core_config.smoothing_sigma)
+        self.window_size = tk.IntVar(value=self._core_config.window_size)
+        self.overlap = tk.DoubleVar(value=self._core_config.overlap)
+        self.bg_threshold = tk.IntVar(value=self._core_config.bg_threshold)
+
+    @property
+    def config(self) -> NematicsConfig:
+        """Get current config from GUI values"""
+        return NematicsConfig(
+            image_type=self.image_type.get(),
+            pixel_size=self.pixel_size.get(),
+            k11=self.k11.get(),
+            k33=self.k33.get(),
+            s0=self.s0.get(),
+            smoothing_sigma=self.smoothing_sigma.get(),
+            window_size=self.window_size.get(),
+            overlap=self.overlap.get(),
+            bg_threshold=self.bg_threshold.get(),
+        )
+
+    def update_gui(self, new_config: NematicsConfig):
+        """Update GUI from new config values"""
+        self._core_config = new_config
+        self.image_type.set(new_config.image_type)
+        self.pixel_size.set(new_config.pixel_size)
+        self.k11.set(new_config.k11)
+        self.k33.set(new_config.k33)
+        self.s0.set(new_config.s0)
+        self.smoothing_sigma.set(new_config.smoothing_sigma)
+        self.window_size.set(new_config.window_size)
+        self.overlap.set(new_config.overlap)
+        self.bg_threshold.set(new_config.bg_threshold)
+
+@dataclass
 class BarcodeConfigGUI:
     """Auto-generated master GUI configuration"""
     _core_config: BarcodeConfig = field(default_factory=BarcodeConfig)
@@ -689,6 +747,7 @@ class BarcodeConfigGUI:
     image_binarization_parameters: BinarizationConfigGUI = field(init=False)
     intensity_distribution_parameters: IntensityDistributionConfigGUI = field(init=False)
     modules: ModuleConfigGUI = field(init=False)
+    nematics_parameters: NematicsConfigGUI = field(init=False)
     optical_flow_parameters: OpticalFlowConfigGUI = field(init=False)
     reader: ReaderConfigGUI = field(init=False)
     writer: WriterConfigGUI = field(init=False)
@@ -698,6 +757,7 @@ class BarcodeConfigGUI:
         self.image_binarization_parameters = BinarizationConfigGUI(self._core_config.image_binarization_parameters)
         self.intensity_distribution_parameters = IntensityDistributionConfigGUI(self._core_config.intensity_distribution_parameters)
         self.modules = ModuleConfigGUI(self._core_config.modules)
+        self.nematics_parameters = NematicsConfigGUI(self._core_config.nematics_parameters)
         self.optical_flow_parameters = OpticalFlowConfigGUI(self._core_config.optical_flow_parameters)
         self.reader = ReaderConfigGUI(self._core_config.reader)
         self.writer = WriterConfigGUI(self._core_config.writer)
@@ -710,6 +770,7 @@ class BarcodeConfigGUI:
             image_binarization_parameters=self.image_binarization_parameters.config,
             intensity_distribution_parameters=self.intensity_distribution_parameters.config,
             modules=self.modules.config,
+            nematics_parameters=self.nematics_parameters.config,
             optical_flow_parameters=self.optical_flow_parameters.config,
             reader=self.reader.config,
             writer=self.writer.config,
