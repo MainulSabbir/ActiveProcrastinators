@@ -1,0 +1,20 @@
+# Python environments
+venv/
+.venv/
+env/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# BARCODE / Nematics run outputs (regenerable)
+Nematics_Output/
+*BARCODE Output/
+*Settings.yaml
+*Summary.csv
+*Time.txt
+*Error Log.txt
