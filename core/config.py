@@ -127,11 +127,12 @@ class VisualizationConfig(BaseConfig):
 @dataclass
 class ModuleConfig(BaseConfig):
     """Analysis module selection and coordination"""
-    
+
     image_binarization: bool = False
     optical_flow: bool = False
     intensity_distribution: bool = False
-    
+    nematics: bool = False
+
 @dataclass
 class ReaderConfig(BaseConfig):
     accept_dim_channels: bool = False
@@ -173,6 +174,48 @@ class IntensityDistributionConfig(BaseConfig):
     percentage_frames_evaluated: float = 0.05
 
 @dataclass
+class NematicsConfig(BaseConfig):
+    """Nematic liquid-crystal / director-field analysis (Nematics branch).
+
+    image_type selects the pipeline:
+        "multipolarized" - PolScope raw 2x2 polarization mosaic -> Q tensor
+        "microscopy"     - confocal/brightfield -> structure-tensor Q field
+        "sipli"          - Shear-Induced Polarized Light Imaging (saturation only)
+
+    Multipolarized/microscopy outputs: director-field overlay per image,
+    correlation length (from the director), length scale + energy-spectrum
+    plot with its peak. SIPLI outputs: saturation min/max/avg (no image).
+    """
+
+    image_type: str = "multipolarized"  # "multipolarized" | "microscopy" | "sipli"
+
+    # scale / physics (shared by multipolarized + microscopy)
+    pixel_size: float = 0.45  # microns per pixel (energy-spectrum k-axis)
+    k11: float = 0.4          # splay Frank constant
+    k33: float = 1.0          # bend Frank constant
+    s0: float = 1.0           # reference scalar order parameter
+
+    # multipolarized band-limiting.
+    # The PolScope Jones reconstruction gives a director estimate per pixel, and
+    # those estimates are white-noise-like at the pixel scale. Feeding them
+    # straight to the energy spectrum makes (grad Q)^2 rise all the way to
+    # Nyquist, so the peak pins to ~2 px and the length scale is meaningless.
+    # Smoothing Q first removes only that aliased noise -- you cannot resolve
+    # director structure finer than the smoothing length anyway. The default
+    # matches the Methods of Sokolov et al., Adv. Mater. 2025, 37, 2418846
+    # (Gaussian filter, sigma = 2 px ~ 0.9 um) for exactly this PolScope data.
+    # 0 disables smoothing (expect a Nyquist-pinned peak).
+    smoothing_sigma: float = 2.0  # Gaussian sigma (px) applied to the PolScope Q
+
+    # microscopy coarse-graining
+    window_size: int = 32     # px window for structure-tensor coarse-graining
+    overlap: float = 0.5      # window overlap fraction (0-1)
+
+    # SIPLI
+    bg_threshold: int = 25    # brightness (V, 0-255) below which pixels = background
+
+
+@dataclass
 class AnalysisConfig(BaseConfig):
     aggregation: AggregationConfig = field(default_factory=AggregationConfig)
     comparison: ComparisonConfig = field(default_factory=ComparisonConfig)
@@ -184,6 +227,7 @@ class BarcodeConfig(BaseConfig):
     image_binarization_parameters: BinarizationConfig = field(default_factory=BinarizationConfig)
     intensity_distribution_parameters: IntensityDistributionConfig = field(default_factory=IntensityDistributionConfig)
     modules: ModuleConfig = field(default_factory=ModuleConfig)
+    nematics_parameters: NematicsConfig = field(default_factory=NematicsConfig)
     optical_flow_parameters: OpticalFlowConfig = field(default_factory=OpticalFlowConfig)
     reader: ReaderConfig = field(default_factory=ReaderConfig)
     writer: WriterConfig = field(default_factory=WriterConfig)
@@ -316,6 +360,7 @@ GUI_CONFIG_CLASSES = [
     AggregationConfig,
     ComparisonConfig,
     ModuleConfig,
+    NematicsConfig,
     VisualizationConfig,
 ]
 
