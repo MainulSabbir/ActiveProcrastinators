@@ -1,3 +1,18 @@
+> ### This is a fork of BARCODE
+>
+> This fork adds a fourth analysis branch, **[Nematics](#nematics-settings)**, for 2D
+> active-nematic images. It extracts the **director field** from your images and reports
+> the characteristic **length scales** of the system: the nematic **correlation length**
+> ξ and the **length scale λ\*** from the peak of the elastic energy spectrum.
+>
+> Everything documented below from the upstream project works unchanged — the Nematics
+> branch is additive and can be run on its own or alongside the existing branches.
+>
+> Upstream project: **[BARCODE-HTP/barcode](https://github.com/BARCODE-HTP/barcode)**.
+> See [`NEMATICS_INTEGRATION.md`](NEMATICS_INTEGRATION.md) for the design notes and
+> [`Nematics/README_energy.md`](Nematics/README_energy.md) for the standalone
+> command-line energy tools.
+
 # Table of Contents
 - [Table of Contents](#table-of-contents)
 - [Installation](#installation)
@@ -8,6 +23,7 @@
     - [Binarization Settings](#binarization-settings)
     - [Optical Flow Settings](#optical-flow-settings)
     - [Intensity Distribution Settings](#intensity-distribution-settings)
+    - [Nematics Settings](#nematics-settings)
     - [Barcode Generator + CSV Aggregator](#barcode-generator--csv-aggregator)
     - [Barcode Metric Comparison](#barcode-metric-comparison)
     - [Reduced Data Structure Visualization](#reduced-data-structure-visualization)
@@ -16,7 +32,9 @@
     - [Binarization Metrics](#binarization-metrics)
     - [Optical Flow Field Metrics](#optical-flow-field-metrics)
     - [Intensity Distribution Metrics](#intensity-distribution-metrics)
+    - [Nematics Metrics](#nematics-metrics)
   - [Output Files](#output-files)
+  - [Nematics Output Files](#nematics-output-files)
 
 Before running BARCODE we recommend going through our detailed **[BARCODE 2.0 Tutorial](https://www.livingbam.org/barcode-2-tutorial)** which includes test data. It should take 10-15 seconds on a standard desktop computer to analyze the test data in the tutorial using the software.
 
@@ -52,6 +70,7 @@ Each branch also contains a live preview of the output, showing visualizations o
 | Image Binarization | Analyze all chosen videos with the Image Binarization branch | 
 | Optical Flow | Analyze all chosen videos with the Optical Flow branch |
 | Intensity Distribution | Analyze all chosen videos with the Intensity Distribution branch |
+| Nematics | Analyze the chosen images with the [Nematics](#nematics-settings) branch (director field + length scales); enabled in the "Nematics Analysis" tab |
 | **Handling Dim Data** | |
 | Scan Dim Files | Run the program on files that are dim (defined as videos where the mean pixel intensity in the first frame is less than $\frac{2}{e}$ times the minimum pixel intensity) -- files meeting this criteria are labeled in the BARCODE CSV file under the Flags section with a numerical label of 1 |
 | Scan Dim Channels | Run the program on channels that are dim (defined in "Include Dim Files" setting) -- video channels meeting this criteria are labeled in the BARCODE CSV file under the Flags section (described in "Include Dim Files" setting) |
@@ -93,6 +112,42 @@ The intensity distribution module takes frames from a video and creates an inten
 | Distribution Number of Bins | Controls the number of bins in histogram; increasing/decreasing the number of bins may result in binning artifacts that affect accuracy of intensity distribution | (100, 500) | 300 |
 | Distribution Noise Threshold | Controls the minimum normalized probability in the intensity distribution; probabilities below this threshold are set to 0 and the distribution is renormalized; increasing/decreasing this will affect the sensitivity of the metrics to noise, which is particularly relevant for higher pixel intensity values | (0.00001, 0.01) | 0.0005 |
 | Fraction of Frames Evaluated | Used for determining frames for averaging in calculation of kurtosis/median skewness/mode skewness change; not used for calculation of maximum kurtosis/median skewness/mode skewness metrics; decreasing this results in fewer frames being used for these averages, at the cost of more sensitivity to noise | (0.01, 0.25) | 0.05 |
+
+### Nematics Settings
+*Added by this fork.*
+
+The Nematics module analyzes 2D active-nematic images. It reconstructs the **director field** **n**(x, y) — the local axis of molecular alignment — and from it computes the characteristic length scales of the system. It accepts a single image or a folder of images (treated as a time series), selected as usual in the [Execution Settings](#execution-settings) tab.
+
+Because different microscopy techniques encode orientation differently, you first tell the program **what kind of images these are**, which selects how the Q-tensor is extracted:
+
+| Image Type | Data | How the director is obtained |
+| - | - | - |
+| **Multipolarized (PolScope)** | Raw 2×2 polarization mosaic | Jones-calculus reconstruction of retardance and slow-axis angle at every pixel |
+| **Microscopy** | Confocal / brightfield / fluorescence | Structure tensor of the image gradients, coarse-grained over a sliding window |
+| **Shear-Induced Polarized (SIPLI)** | Color image | Not a director method — reports saturation statistics only, no image output |
+
+To run it: open the **Nematics Analysis** tab, tick **Enable Nematics Branch**, and choose the image type. Leave the other branch checkboxes unticked for a Nematics-only run.
+
+**Director & Energy Parameters** (Multipolarized and Microscopy):
+
+| Setting Name | Description | Limits | Default Value |
+| - | - | - | - |
+| Pixel size (µm/pixel) | Physical size of one pixel; sets the wavenumber axis of the energy spectrum ($k = 1/\lambda$) and converts the correlation length into microns. Leave at 1 to report results in pixels | (0.0001, 1000) | 0.45 |
+| Splay constant k11 | Splay Frank elastic constant, $K_{11}$; weights the splay contribution to the elastic energy | (0, 1000) | 0.4 |
+| Bend constant k33 | Bend Frank elastic constant, $K_{33}$; weights the bend contribution to the elastic energy | (0, 1000) | 1.0 |
+| Reference order S0 | Reference scalar order parameter used to convert the Frank constants into the Landau–de Gennes $L_i$ coefficients | (0, 1) | 1.0 |
+| Director smoothing σ (px) | **Multipolarized only.** Width of the Gaussian applied to the Q-tensor before computing the energy spectrum. The per-pixel Jones estimate is noisy at the pixel scale, which otherwise drives $(\nabla Q)^2$ to the Nyquist limit and pins the spectrum peak at ~2 px, making the length scale meaningless. Affects the spectrum only — the director overlay and correlation length always use the unsmoothed field. Set 0 to disable | (0, 50) | 2.0 |
+| Coarse-grain window (px) | Side length of the window over which the structure tensor is averaged to build the director grid; should be comparable to the feature spacing in the image | (4, 256) | 32 |
+| Window overlap (0–1) | Fraction of overlap between neighboring coarse-graining windows; higher values give a denser grid at greater cost | (0, 0.95) | 0.5 |
+
+**SIPLI Parameters:**
+
+| Setting Name | Description | Limits | Default Value |
+| - | - | - | - |
+| Background threshold (0–255) | Brightness (HSV value) below which a pixel is treated as background and excluded from the saturation statistics | (0, 255) | 25 |
+
+When the run finishes, a results window opens with tabs for the metric summary, the per-frame director overlays, the correlation-function fit (Microscopy), and the energy spectrum.
+
 ### Barcode Generator + CSV Aggregator
 | Setting Name |  Description |
 | - | - |
@@ -158,6 +213,21 @@ The Intensity Distribution module computes a intensity distribution histogram fo
 | **Median Skewness Change** | The change in the median skewness between the beginning and end of the video, calculated in a similar manner to the ***Kurtosis Change*** |
 | **Mode Skewness Difference** | The change in the mode skewness between the beginning and end of the video, calculated in a similar manner to the ***Kurtosis Change*** |
 
+### Nematics Metrics
+*Added by this fork.* The Nematics module reports these separately from the BARCODE summary CSV, in its own output folder (see [Nematics Output Files](#nematics-output-files)).
+
+| Metric | Description |
+| - | - |
+| **Correlation Length (ξ)** | The distance over which the nematic orientation stays correlated. Computed from the spatial autocorrelation of the Q-tensor field, $C(r) = \langle Q(\mathbf{r}_0) : Q(\mathbf{r}_0 + \mathbf{r}) \rangle$, radially averaged and fit to an exponential decay $C(r) \sim e^{-r/\xi}$. The mean Q is subtracted first, so this is the *fluctuation* correlation length — a net global alignment does not inflate it. Reported per image (in pixels and microns, with the fit $R^2$) and averaged over the run |
+| **Length Scale (λ\*)** | The dominant length scale of the director field, taken from the peak of the elastic energy spectrum: $\lambda^* = 1/k^*$. Reported once per run |
+| **Energy Spectrum Peak (k\*)** | The wavenumber at which the elastic energy spectrum $E(k)$ is largest, i.e. the scale storing the most elastic energy. $E(k)$ is the elastic energy $(\nabla Q)^2$ decomposed by wavenumber and averaged over all frames in the run. $k$ is the cyclic wavenumber $1/\lambda$, in µm⁻¹ |
+| **Average Order Parameter** | The mean degree of local alignment over the image (0 = isotropic, higher = better aligned). **Multipolarized only**, computed from the normalized polarization components |
+| **Saturation (min / max / average)** | **SIPLI only.** The minimum, maximum, and mean color saturation over the sample, with background pixels excluded by the brightness threshold. Also reports what fraction of the frame counted as sample |
+
+The elastic energy follows Eq. 2 of *Sokolov, Katuri, de Pablo & Snezhko, "Synthetic Active Liquid Crystals Powered by Acoustic Waves", Adv. Mater. 2025, 37, 2418846*.
+
+> **Interpreting the numbers.** ξ and λ\* are different measurements and need not agree — ξ is how far orientational order persists, λ\* is the scale holding the most elastic energy. Both are reported so they can be compared. The elastic constants (k11, k33, S0) set the absolute energy scale but **not** the position of the spectrum peak, so λ\* is unaffected by leaving them at their defaults. All physical lengths depend on the pixel size you enter; leave it at 1 to work in pixels, which requires no assumption.
+
 ## Output Files
 The BARCODE program saves multiple outputs during the course of the analysis.
 **Summary:** At the base level, the BARCODE program outputs a CSV file containing a 1x28 matrix for each video channel analyzed in a given dataset. Each matrix contains an entry listing the name of the video file being analyzed, followed by the channel analyzed for the given file -- in the case of the "Parse All Channels" setting being selected, this results in one entry for each distinct channel in a given video file. This is followed by the "Flags" parameter, which lists potential issues that BARCODE may have encountered within the dataset -- the meaning of these flags is described below. Following this is the 1x25 matrix describing the outputs of BARCODE's 3 branches. Any branch that is not used will have NaN (Not a Number) values populating the corresponding metrics for that branch.
@@ -176,3 +246,27 @@ The BARCODE program saves multiple outputs during the course of the analysis.
 - **Reduced Data Structures:** The program will also output the reduced data structures used to perform the analysis, including the binarized frames of the video for the binarization module, the flow fields for the optical flow module, and the intensity distributions for the intensity distribution module, as well as the radial distributions of the intensity and velocity correlations, from both the binarization and intensity distribution modules, respectively. All three of these are saved in CSV file format, and are comparatively small, with the largest files being at most 1-10 MB.
 
 The visualizations and reduced data structures are saved in a folder titled ```{name of file} BARCODE Output```, saved in the same folder as the file, within a subfolder for each channel evaluated. The summary and barcode are saved in the root folder where the program is running.
+
+## Nematics Output Files
+*Added by this fork.*
+
+The Nematics branch writes to its own folder, ```Nematics_Output```, created next to the selected file or inside the selected directory. It does not write to the BARCODE summary CSV.
+
+**Multipolarized / Microscopy:**
+
+| File | Contents |
+| - | - |
+| ```nematics_metrics.csv``` | Per-image correlation length (pixels and microns) and fit $R^2$, plus average order parameter for Multipolarized. The final row carries the run-level values: mean correlation length, energy-spectrum peak $k^*$, and length scale $\lambda^*$ |
+| ```nematics_summary.txt``` | The same metrics as human-readable text — identical to what is shown in the results window and the Processing Log |
+| ```{name of image}_director.png``` | The image with its director field overlaid as rods, one per image |
+| ```{name of image}_correlation.png``` | Three-panel diagnostic of the $C(r)$ fit used for the correlation length (**Microscopy only**) |
+| ```energy_spectrum.png``` | The time-averaged elastic energy spectrum $E(k)$ with its peak marked; one per run, since the spectrum is averaged over every image in the folder |
+| ```energy_spectrum.npz``` | The same spectrum as raw arrays, for replotting or further analysis |
+
+**SIPLI:**
+
+| File | Contents |
+| - | - |
+| ```sipli_saturation.csv``` | Per-image minimum, maximum, and average saturation, plus the fraction of the frame counted as sample. No images are produced |
+
+Running on a folder treats it as a time series: the director overlay and correlation length are computed per image, while the energy spectrum is averaged across all of them to give one length scale for the run.
