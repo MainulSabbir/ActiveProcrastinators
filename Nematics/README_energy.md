@@ -111,6 +111,122 @@ tidy convention.
 
 ---
 
+## 4b. Function reference
+
+Everything below is importable. Add this folder to your path first:
+
+```python
+import sys; sys.path.insert(0, "Nematics")
+```
+
+### `elastic_energy_2d.py` — the physics
+Landau–de Gennes elastic energy, Eq. 2 of the paper above. Knows nothing about
+files or BARCODE; it takes arrays and returns arrays.
+
+| Function | What it does |
+|---|---|
+| `build_Q(theta, S, trace=2)` | Builds the 2×2 Q-tensor from a director angle field and order parameter: `Q_ij = S(n_i n_j − δ_ij/trace)`. Returns a nested list `Q[i][j]`, each entry a 2D array. Use `trace=2` for the 2D traceless convention BARCODE stores |
+| `elastic_energy_2d(Q, dx, dy, L1, L2, L6)` | The energy itself. Returns `(E_total, E_L1, E_L2, E_L6)` — the total density plus its three separate contributions, all per-pixel maps |
+| `L_from_K(K11, K33, S, trace=2)` | Converts Frank constants (splay `K11`, bend `K33`) into the Landau–de Gennes `L1, L2, L6`. Note `L1` always comes back 0: in 2D only `(2L1 + L2)` and `L6` are determined, so the whole isotropic part is carried by `L2` |
+| `K_from_L(L1, L2, L6, S, trace=2)` | The inverse. Useful for sanity-checking `L_i` values quoted in a paper |
+| `grad(f, dx, dy)` | Helper: returns `[df/dx, df/dy]` for an array laid out as `[y, x]` |
+
+### `barcode_energy.py` — files, energy maps, and the spectrum
+The bridge between stored `.npz` files and the physics above.
+
+**Finding and loading frames**
+
+| Function | What it does |
+|---|---|
+| `list_q_files(processed_dir)` | Every `*_Q.npz` in `<processed_dir>/Q_data`, sorted by frame number (not alphabetically, so `pic--9` precedes `pic--10`) |
+| `frame_range(processed_dir)` | `(first, last, count)` of the available frame numbers |
+| `resolve_frame(processed_dir, frame)` | Path to a given frame. Matches the *actual* numbering, so it works whether a dataset starts at 1 or 1001; `None` picks the middle frame |
+| `frame_index(path)` | Pulls the integer frame number out of a `…--<N>_Q.npz` filename |
+| `load_Q(path)` | Reads `(Qxx, Qxy)` as float64 from one `.npz` |
+
+**Energy**
+
+| Function | What it does |
+|---|---|
+| `energy_maps(Qxx, Qxy, k11, k33, s0, core_threshold=0.15, pixel_size=1.0)` | The adapter: recovers `θ` and `S` from the stored components, rebuilds the full tensor, evaluates Eq. 2, and flags defect cores. Returns a dict with `E_total`, `E_L1`, `E_L2`, `E_L6`, `S`, `theta`, `core`, and the `L` constants used |
+
+**Spectrum** — call these three in order, or use the one-shot wrapper.
+
+| Function | What it does |
+|---|---|
+| `spectrum_setup(shape, pixel_size, nbins=None)` | Precomputes the k-grid, Hann taper, and radial bin assignment **once** for a dataset. Doing this per frame is the slow path; reusing the setup is ~50× faster |
+| `frame_energy_spectrum(Qxx, Qxy, setup)` | `E(k)` for one frame — the elastic energy summed into radial wavenumber shells |
+| `peak_wavenumber(k_centers, E)` | The peak `k*` of a spectrum, refined to sub-bin precision by fitting a parabola to the three points around the maximum. Skips the DC bins |
+| `timeavg_energy_spectrum(processed_dir, pixel_size, fmin=None, fmax=None, nbins=None)` | **One-shot**: does all three of the above across a whole dataset. Returns `(k_centers, E_avg, kstar, files)`. The length scale is `λ* = 1/kstar` |
+
+### `polscope_qtensor_functions.py` — PolScope (multipolarized) images
+Jones-calculus reconstruction from a raw 2×2 polarization mosaic.
+
+| Function | What it does |
+|---|---|
+| `load_channels(path)` | Splits the raw mosaic into its four polarization channels `(I0, I45, I90, I135)` |
+| `reconstruct(channels)` | The reconstruction. Returns `(alpha, delta)` — director angle and retardance in radians, per pixel |
+| `order_parameter(channels)` | Mean scalar order parameter over the image, `⟨√(P1² + P2²)⟩` |
+| `save_and_plot(channels, alpha, delta, stem, op=None)` | Builds `Qxx/Qxy`, writes `<stem>.npz`, and saves a four-panel figure. Returns `(Qxx, Qxy)` |
+| `pick_image()` | Interactive helper: lists images in the current folder and prompts for one |
+
+### `biofilm_qtensor.py` — microscopy images
+Structure-tensor extraction plus the correlation-length machinery. The
+correlation functions are method-agnostic — they work on *any* Q field, which is
+why the multipolarized path reuses them.
+
+**Extraction pipeline** (in order)
+
+| Function | What it does |
+|---|---|
+| `load_grayscale(path, channel="auto")` | Loads an image as float grayscale in [0, 1], signal bright |
+| `correct_illumination(gray, sigma)` | Divides out slowly-varying illumination estimated by a large Gaussian blur |
+| `make_mask(corrected, ...)` | Foreground mask: signal = 1, background = 0 |
+| `structure_tensor(gray, sigma)` | Sobel gradients → local structure tensor `J`, smoothed over `sigma` |
+| `coarse_grain_qtensor(Jxx, Jyy, Jxy, mask, window_size, overlap, min_frac)` | Averages `J` over sliding windows (foreground only) → the director grid. Returns a dict with `Qxx`, `Qxy`, `S`, `theta`, window centres, and the grid step |
+| `run_pipeline(image_path, ..., save_prefix=None, show_plots=True)` | **One-shot**: runs everything above, plus the correlation length and plots. Returns a dict with `field`, `xi_px`, `r2`, the `C(r)` arrays, and the figures |
+
+**Correlation length** (also usable standalone)
+
+| Function | What it does |
+|---|---|
+| `nematic_correlation_2d(Qxx, Qxy, valid)` | 2D autocorrelation of the Q field by FFT (Wiener–Khinchin). The mean Q is subtracted, so this is the *fluctuation* correlation — a global alignment won't inflate it |
+| `radial_average_correlation(C_norm, pair_counts, center, step_x, step_y, ...)` | Bins the 2D map by radial distance, with guards against the noisy far tail where few pixel pairs contribute |
+| `fit_correlation_length(r, C, decay_threshold=0.12, min_points=4)` | Fits `C(r) = A·exp(−r/ξ)` to the reliable near-field decay. Returns `ξ` in pixels with the fit `R²` |
+
+**Output**
+
+| Function | What it does |
+|---|---|
+| `plot_director_field(gray_bg, field, rod_length_scale=0.9, ax=None)` | Director overlay — rods coloured by local order `S` |
+| `plot_correlation_function(...)` | The 3-panel `C(r)` diagnostic: the fit, a log-linear straightness check, and pairs-per-bin |
+| `save_qtensor_npz(Qxx, Qxy, path)` | Writes the two independent components as float32, in the convention these tools expect |
+
+### `saturation_tool.py` — SIPLI images
+
+| Function | What it does |
+|---|---|
+| `analyze_saturation(image_path, outdir, bg_thresh=25)` | Splits into hue/saturation/brightness and returns the saturation min, max, and mean over the sample, with background excluded by the brightness threshold |
+| `find_image_in_folder(folder)` | Picks the image to analyze from a folder, skipping the tool's own outputs |
+
+### A minimal example
+
+```python
+import sys; sys.path.insert(0, "Nematics")
+import barcode_energy as be
+
+# length scale of a whole dataset, in microns
+k, E, kstar, files = be.timeavg_energy_spectrum("path/to/processed_dir", pixel_size=0.45)
+print(f"peak k* = {kstar:.4f} um^-1   ->   length scale = {1/kstar:.2f} um")
+
+# energy maps for one frame
+Qxx, Qxy = be.load_Q(be.resolve_frame("path/to/processed_dir", frame=89))
+m = be.energy_maps(Qxx, Qxy, k11=0.4, k33=1.0, s0=1.0)
+print("mean elastic energy:", m["E_total"][~m["core"]].mean())
+```
+
+---
+
 ## 5. Options shared by the scripts
 
 | Flag | Default | Meaning |
